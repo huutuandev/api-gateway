@@ -1,6 +1,7 @@
 package com.aigateway.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     // ── 409 Conflict ─────────────────────────────────────────────────────────
@@ -41,6 +43,37 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request.getRequestURI());
+    }
+
+    // ── 404 Not Found ─────────────────────────────────────────────────────────
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(
+            ResourceNotFoundException ex,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
+    }
+
+    // ── 502 Bad Gateway: LLM provider error ──────────────────────────────────
+    @ExceptionHandler(com.aigateway.llm.LlmException.class)
+    public ResponseEntity<Map<String, Object>> handleLlmError(
+            com.aigateway.llm.LlmException ex,
+            HttpServletRequest request
+    ) {
+        // Log the cause for debugging but don't expose provider internals to client
+        log.warn("LLM provider error: {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_GATEWAY, "LLM provider error: " + ex.getMessage(),
+                request.getRequestURI());
+    }
+
+    // ── 429 Too Many Requests: Rate limit exceeded ───────────────────────────
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(
+            RateLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        log.warn("Rate limit exceeded for path {}: {}", request.getRequestURI(), ex.getMessage());
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request.getRequestURI());
     }
 
     // ── 400 Validation errors ─────────────────────────────────────────────────
