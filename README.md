@@ -4,14 +4,15 @@
 
 AI Gateway là một backend REST API service được xây dựng bằng Spring Boot, đóng vai trò là gateway trung gian cho các AI request.
 
-Dự án hiện đang ở giai đoạn **Authentication**:
+Dự án hiện đã hoàn thành các module **Authentication, Conversation, AI Chat & Rate Limiting**:
 
 - Authentication flow (Register, Login, Refresh Token, Logout) đã được implement
 - JWT-based stateless authentication với Refresh Token rotation qua Redis
+- AI Chat sử dụng mô hình LLM từ Groq (chuyển đổi từ OpenAI)
+- Conversation & Message history management
+- Fixed-window Rate Limiting cho API Chat qua Redis
+- Lưu vết AI Requests và Token Usage
 - Database schema đã tạo đầy đủ (users, conversations, messages, ai_requests)
-- Các feature khác như AI chat, conversation management, usage tracking **chưa được implement**
-
----
 
 ## Tech Stack
 
@@ -30,8 +31,9 @@ Dự án hiện đang ở giai đoạn **Authentication**:
 | Build | Maven | — |
 | Boilerplate | Lombok | (optional, annotation processor) |
 | Monitoring | Spring Actuator | (managed by Spring Boot) |
+| LLM Provider| Groq API | (llama-3.3-70b-versatile) |
 
-> **Không có:** Swagger/OpenAPI, Docker Compose cho ứng dụng (chỉ có cho PostgreSQL và Redis), Kafka, RabbitMQ, rate limiting.
+> **Không có:** Swagger/OpenAPI, Docker Compose cho ứng dụng (chỉ có cho PostgreSQL và Redis), Kafka, RabbitMQ.
 
 ---
 
@@ -226,6 +228,7 @@ erDiagram
 | POST | `/api/v1/auth/login` | Public | 200 OK | Login, returns JWT + refresh token |
 | POST | `/api/v1/auth/refresh` | Public | 200 OK | Rotate refresh token, returns new tokens |
 | POST | `/api/v1/auth/logout` | Bearer JWT | 204 No Content | Invalidate refresh token |
+| POST | `/api/v1/ai/chat` | Bearer JWT | 200 OK | Gửi tin nhắn AI Chat, kèm Rate Limiting (429) |
 
 ### Request / Response
 
@@ -310,6 +313,7 @@ Response `204 No Content`
 | Duplicate email on register | 409 Conflict |
 | Wrong email or password | 401 Unauthorized |
 | Invalid / expired refresh token | 401 Unauthorized |
+| Vượt quá giới hạn Rate Limit (Chat) | 429 Too Many Requests |
 | Validation error (blank field, bad email format, short password) | 400 Bad Request |
 | Server error | 500 Internal Server Error |
 
@@ -380,7 +384,8 @@ mvn clean test
 
 | Variable | Required | Default (dev only) | Description |
 |----------|----------|--------------------|-------------|
-| `JWT_SECRET` | **Yes** (production) | `default-dev-secret-change-this-in-production-must-be-at-least-32-chars` | HMAC-SHA signing key for JWT. Must be at least 32 characters. |
+| `JWT_SECRET` | **Yes** (production) | `default-dev-secret-change-this-in-production-must-be-at-least-32-chars` | HMAC-SHA signing key cho JWT. |
+| `GROQ_API_KEY` | **Yes** | (none) | API Key để gọi tới Groq LLM API. |
 
 > Database host/port/credentials are currently hardcoded in `application.yaml` as `localhost:5432`, user `postgres`, password `postgres`.
 > Redis host/port are currently hardcoded as `localhost:6379`.
@@ -398,22 +403,11 @@ mvn clean test
 - Access Token cannot be revoked before expiry (no token blacklist) — only Refresh Token can be revoked via logout
 
 **Test:**
-- `AuthControllerTest` has a compilation issue with `@WebMvcTest` in Spring Boot 4.1.1
-- No integration tests against real PostgreSQL or Redis
-- `mvn clean test` does not fully pass as of Day 1
+- Chưa có integration tests hoàn chỉnh đối với PostgreSQL hoặc Redis (chỉ sử dụng e2e test script bằng PowerShell).
 
 **Configuration:**
-- Database credentials (`postgres`/`postgres`) are hardcoded in `application.yaml` — not suitable for production
-- Redis has no password configured in `docker-compose.yml` or `application.yaml`
-- No permanent `JAVA_HOME` configuration — must be set manually on Windows
-
-**Features not yet implemented:**
-- `conversations` table is schema-only — no API endpoints
-- `messages` table is schema-only — no API endpoints
-- `ai_requests` table is schema-only — no API endpoints
-- No AI/LLM integration
-- No usage tracking
-- No admin endpoints
+- Database credentials (`postgres`/`postgres`) are hardcoded in `application.yaml` — not suitable for production.
+- Redis has no password configured in `docker-compose.yml` hoặc `application.yaml`.
 
 ---
 
