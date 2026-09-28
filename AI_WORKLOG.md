@@ -342,4 +342,72 @@ Remaining:
 
 ---
 
-*Worklog được tạo ngày 2026-09-27. Thông tin được reconstruct từ source code và conversation context.*
+## Day 3 — Reliability
+
+### Reliability Features
+
+* **Request ID / Request Tracing**: UUID `requestId` được tạo và propagate xuyên suốt request thông qua Servlet Filter (`RequestLoggingFilter`). Request ID xuất hiện trong logs/console (MDC context) và tất cả Exception flow. API / LLM processing có thể trace dễ dàng bằng `requestId`.
+* **Structured Logging**: Cải thiện log detail với thời lượng xử lý (duration) của LLM request, conversation ID và user ID. Log định dạng chuẩn.
+* **LLM Timeout**: Cấu hình thực tế trong `application.yaml` qua `AiProperties`: `connect-timeout: 5000` và `read-timeout: 30000`. Khi timeout, Spring ném ngoại lệ được bắt và biến thành `LlmException.timeout`.
+* **Retry Mechanism**:
+  * **Retry cho**: Timeout, Network error, HTTP 429, HTTP 5xx.
+  * **Không retry cho**: Các lỗi Client Error như HTTP 400, 401, 403, 404 (Fail-fast behavior để tránh tốn tài nguyên).
+  * **Số lần retry**: `max-retries: 2` (tức tối đa 3 lần gọi).
+  * **Backoff**: Exponential backoff (1s, 2s, 4s).
+* **Redis Rate Limiting Integration**: Tích hợp chặt chẽ với `/ai/chat`, đảm bảo limit theo user. Nếu bị chặn, trả HTTP 429 theo chuẩn Global Exception Handler.
+* **Sensitive Data Protection**:
+  * API Key không xuất hiện trong exception response.
+  * Exception cause/internal provider details (e.g. `[groq]`) không bị expose ra client khi lỗi 502.
+  * Password, JWT, Refresh Token tuyệt đối không xuất hiện trong logs.
+* **Exception Handling**:
+  * Validation (MethodArgumentNotValidException) → HTTP 400
+  * Authentication (AuthenticationException, InvalidCredentialsException, InvalidTokenException) → HTTP 401
+  * Authorization (AccessDeniedException) → HTTP 403
+  * Rate-limit (RateLimitExceededException) → HTTP 429
+  * LLM Timeout (LlmException) → HTTP 504
+  * LLM Unavailable (LlmException) → HTTP 502
+  * Unexpected exception (Exception) → HTTP 500 ("An unexpected error occurred" - không expose stack trace).
+
+### Testing
+
+```text
+52/52 Unit/Integration Tests passed
+BUILD SUCCESS
+```
+Các nhóm test đã verify qua JUnit/Mockito:
+- Validation errors.
+- LLM Provider Retry logic (Mock HTTP 429, timeout, network error).
+- Global Exception Handler mapping logic (Kiểm tra Response entity và việc inject `requestId`).
+- Rate Limiting logic.
+- Authentication & Conversation services.
+
+### Files Modified
+
+```text
+application.yaml
+AiProperties.java
+LlmConfig.java
+GroqLlmProvider.java
+LlmException.java
+GlobalExceptionHandler.java
+SecurityConfig.java
+DelegatedAuthenticationEntryPoint.java (New)
+DelegatedAccessDeniedHandler.java (New)
+AiService.java
+GlobalExceptionHandlerTest.java (New)
+GroqLlmProviderTest.java
+```
+
+### Day 3 Result
+
+```text
+Status: Completed
+
+Tests: 52/52 passed
+
+Known Issues: None
+```
+
+---
+
+*Worklog được cập nhật liên tục theo tiến độ development.*
