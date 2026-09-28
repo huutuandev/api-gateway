@@ -1,5 +1,7 @@
 package com.aigateway.config;
 
+import com.aigateway.security.DelegatedAccessDeniedHandler;
+import com.aigateway.security.DelegatedAuthenticationEntryPoint;
 import com.aigateway.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +22,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DelegatedAuthenticationEntryPoint authenticationEntryPoint;
+    private final DelegatedAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -38,6 +42,11 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
+
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
 
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)

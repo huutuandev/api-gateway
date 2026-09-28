@@ -24,7 +24,7 @@ public class GlobalExceptionHandler {
             EmailAlreadyExistsException ex,
             HttpServletRequest request
     ) {
-        return buildResponse(HttpStatus.CONFLICT, "Email already exists", request.getRequestURI());
+        return buildResponse(HttpStatus.CONFLICT, "Email already exists", request, ex);
     }
 
     // ── 401 Unauthorized: bad credentials ────────────────────────────────────
@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
             InvalidCredentialsException ex,
             HttpServletRequest request
     ) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, "Invalid credentials", request.getRequestURI());
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Invalid credentials", request, ex);
     }
 
     // ── 401 Unauthorized: invalid/expired token ───────────────────────────────
@@ -42,7 +42,25 @@ public class GlobalExceptionHandler {
             InvalidTokenException ex,
             HttpServletRequest request
     ) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request.getRequestURI());
+        return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request, ex);
+    }
+
+    // ── 401 Unauthorized: generic Spring Security auth exception ───────────────
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthenticationException(
+            org.springframework.security.core.AuthenticationException ex,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Authentication failed: " + ex.getMessage(), request, ex);
+    }
+
+    // ── 403 Forbidden: Spring Security access denied ──────────────────────────
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(
+            org.springframework.security.access.AccessDeniedException ex,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.FORBIDDEN, "Access denied", request, ex);
     }
 
     // ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -51,19 +69,22 @@ public class GlobalExceptionHandler {
             ResourceNotFoundException ex,
             HttpServletRequest request
     ) {
-        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request, ex);
     }
 
-    // ── 502 Bad Gateway: LLM provider error ──────────────────────────────────
+    // ── 502 Bad Gateway / 504 Gateway Timeout: LLM provider error ────────────
     @ExceptionHandler(com.aigateway.llm.LlmException.class)
     public ResponseEntity<Map<String, Object>> handleLlmError(
             com.aigateway.llm.LlmException ex,
             HttpServletRequest request
     ) {
-        // Log the cause for debugging but don't expose provider internals to client
         log.warn("LLM provider error: {}", ex.getMessage());
-        return buildResponse(HttpStatus.BAD_GATEWAY, "LLM provider error: " + ex.getMessage(),
-                request.getRequestURI());
+        
+        if (ex.getMessage() != null && ex.getMessage().contains("timed out")) {
+            return buildResponse(HttpStatus.GATEWAY_TIMEOUT, "LLM provider timed out", request, ex);
+        }
+        
+        return buildResponse(HttpStatus.BAD_GATEWAY, "LLM provider is currently unavailable", request, ex);
     }
 
     // ── 429 Too Many Requests: Rate limit exceeded ───────────────────────────
@@ -73,7 +94,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         log.warn("Rate limit exceeded for path {}: {}", request.getRequestURI(), ex.getMessage());
-        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request.getRequestURI());
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request, ex);
     }
 
     // ── 400 Validation errors ─────────────────────────────────────────────────
@@ -88,7 +109,7 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining("; "));
 
-        return buildResponse(HttpStatus.BAD_REQUEST, message, request.getRequestURI());
+        return buildResponse(HttpStatus.BAD_REQUEST, message, request, ex);
     }
 
     // ── 500 Fallback ──────────────────────────────────────────────────────────
@@ -100,7 +121,7 @@ public class GlobalExceptionHandler {
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred",
-                request.getRequestURI()
+                request, ex
         );
     }
 
@@ -108,14 +129,25 @@ public class GlobalExceptionHandler {
     private ResponseEntity<Map<String, Object>> buildResponse(
             HttpStatus status,
             String message,
-            String path
+            HttpServletRequest request,
+            Exception ex
     ) {
+        if (ex != null) {
+            request.setAttribute("errorType", ex.getClass().getSimpleName());
+        }
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", Instant.now().toString());
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
-        body.put("path", path);
+        body.put("path", request.getRequestURI());
+        
+        String requestId = org.slf4j.MDC.get("requestId");
+        if (requestId != null) {
+            body.put("requestId", requestId);
+        }
+
         return ResponseEntity.status(status).body(body);
     }
 }
