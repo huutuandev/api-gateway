@@ -58,6 +58,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                org.slf4j.MDC.put("userId", String.valueOf(userId));
                 log.debug("JWT authenticated: userId={}", userId);
 
             } catch (Exception e) {
