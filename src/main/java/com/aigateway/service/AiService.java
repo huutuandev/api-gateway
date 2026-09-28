@@ -101,18 +101,22 @@ public class AiService {
         AiRequestStatus status;
         String errorMessage = null;
 
+        long startAiTime = System.currentTimeMillis();
+
         try {
             llmResponse = llmProvider.complete(messages, model);
             status = AiRequestStatus.SUCCESS;
 
         } catch (LlmException ex) {
+            long failDuration = System.currentTimeMillis() - startAiTime;
             status = ex.getMessage() != null && ex.getMessage().contains("timed out")
                     ? AiRequestStatus.TIMEOUT
                     : AiRequestStatus.FAILED;
             errorMessage = ex.getMessage();
-            log.warn("LLM call failed: userId={}, status={}, error={}", userId, status, errorMessage);
+            log.warn("LLM call failed: userId={}, conversationId={}, model={}, duration={}ms, status={}, error={}", 
+                     userId, conversation.getId(), model, failDuration, status, errorMessage);
 
-            persistAuditRecord(user, conversation, model, null, null, null, null, status, errorMessage);
+            persistAuditRecord(user, conversation, model, null, null, null, failDuration, status, errorMessage);
             throw ex;
         }
 
@@ -130,6 +134,9 @@ public class AiService {
                 llmResponse.promptTokens(), llmResponse.completionTokens(),
                 llmResponse.totalTokens(), llmResponse.latencyMs(),
                 status, null);
+
+        log.info("AI chat completed: userId={}, conversationId={}, model={}, duration={}ms, status={}",
+                 userId, conversation.getId(), llmResponse.model(), llmResponse.latencyMs(), status);
 
         // 7. Return response
         return buildChatResponse(conversation.getId(), assistantMsg, llmResponse);

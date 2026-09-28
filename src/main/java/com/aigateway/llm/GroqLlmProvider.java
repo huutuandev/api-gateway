@@ -60,11 +60,47 @@ public class GroqLlmProvider implements LlmProvider {
 
         log.debug("[{}] Sending {} messages, model={}", PROVIDER, messages.size(), resolvedModel);
 
+        int maxRetries = aiProperties.getLlm().getMaxRetries();
+        int attempts = 0;
         long start = System.currentTimeMillis();
-        GroqResponse groqResponse = callApi(messages, resolvedModel);
-        long latency = System.currentTimeMillis() - start;
 
-        return toLlmResponse(groqResponse, latency);
+        while (true) {
+            attempts++;
+            try {
+                GroqResponse groqResponse = callApi(messages, resolvedModel);
+                long latency = System.currentTimeMillis() - start;
+                return toLlmResponse(groqResponse, latency);
+            } catch (LlmException ex) {
+                if (attempts > maxRetries || !isRetryable(ex)) {
+                    if (attempts > 1) {
+                        log.warn("[{}] All {} retries exhausted or non-retryable error.", PROVIDER, attempts - 1);
+                    }
+                    throw ex;
+                }
+                
+                long backoffMs = (long) (Math.pow(2, attempts - 1) * 1000); // 1s, 2s, 4s...
+                log.warn("[{}] Attempt {} failed ({}). Retrying in {} ms...", PROVIDER, attempts, ex.getMessage(), backoffMs);
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new LlmException("[" + PROVIDER + "] Interrupted during retry backoff", ie);
+                }
+            }
+        }
+    }
+
+    private boolean isRetryable(LlmException ex) {
+        // Retry on timeout or network errors
+        if (ex.getMessage() != null && (ex.getMessage().contains("timed out") || ex.getMessage().contains("Network error"))) {
+            return true;
+        }
+        // Retry on HTTP 429 or 5xx
+        if (ex.getStatusCode() != null) {
+            int code = ex.getStatusCode();
+            return code == 429 || code >= 500;
+        }
+        return false;
     }
 
     // ── HTTP call ─────────────────────────────────────────────────────────────
@@ -99,8 +135,9 @@ public class GroqLlmProvider implements LlmProvider {
 
         } catch (ResourceAccessException ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("timeout")) {
-                log.warn("[{}] Request timed out after {} ms", PROVIDER, aiProperties.getTimeoutMs());
-                throw LlmException.timeout(PROVIDER, aiProperties.getTimeoutMs());
+                int readTimeout = aiProperties.getLlm().getReadTimeout();
+                log.warn("[{}] Request timed out after {} ms", PROVIDER, readTimeout);
+                throw LlmException.timeout(PROVIDER, readTimeout);
             }
             log.warn("[{}] Network error: {}", PROVIDER, ex.getMessage());
             throw new LlmException("[" + PROVIDER + "] Network error: " + ex.getMessage(), ex);

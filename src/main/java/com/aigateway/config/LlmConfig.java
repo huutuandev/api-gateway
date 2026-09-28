@@ -20,8 +20,8 @@ public class LlmConfig {
     @Bean("aiRestClient")
     public RestClient aiRestClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(aiProperties.getTimeoutMs());
-        factory.setReadTimeout(aiProperties.getTimeoutMs());
+        factory.setConnectTimeout(aiProperties.getLlm().getConnectTimeout());
+        factory.setReadTimeout(aiProperties.getLlm().getReadTimeout());
 
         return RestClient.builder()
                 .baseUrl(aiProperties.getBaseUrl())

@@ -40,4 +40,11 @@ ai:
   api-key: ${GROQ_API_KEY}
   base-url: https://api.groq.com/openai/v1
   default-model: qwen/qwen3.8-27b
-  timeout-ms: 30000
+  llm:
+    connect-timeout: 5000
+    read-timeout: 30000
+    max-retries: 2
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%15.15t] [%X{requestId}] %-40.40logger{39} : %m%n"

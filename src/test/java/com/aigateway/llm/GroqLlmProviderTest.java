@@ -39,7 +39,10 @@ class GroqLlmProviderTest {
     // Helper: build provider with the mocked RestClient
     private GroqLlmProvider buildProvider() {
         when(aiProperties.getDefaultModel()).thenReturn("llama-3.3-70b-versatile");
-        when(aiProperties.getTimeoutMs()).thenReturn(5000);
+        AiProperties.Llm llmConfig = new AiProperties.Llm();
+        llmConfig.setReadTimeout(5000);
+        llmConfig.setMaxRetries(2);
+        when(aiProperties.getLlm()).thenReturn(llmConfig);
         return new GroqLlmProvider(restClient, aiProperties);
     }
 

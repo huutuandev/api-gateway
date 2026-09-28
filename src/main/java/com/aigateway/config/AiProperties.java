@@ -25,11 +25,19 @@ public class AiProperties {
     /** Default model to use when caller doesn't specify. */
     private String defaultModel;
 
-    /** HTTP connect + read timeout in milliseconds. */
-    private int timeoutMs = 30000;
+    /** Configurations for outbound LLM calls. */
+    private Llm llm = new Llm();
 
     /** Rate limiting configuration for AI endpoints. */
     private RateLimit rateLimit = new RateLimit();
+
+    @Getter
+    @Setter
+    public static class Llm {
+        private int connectTimeout = 5000;
+        private int readTimeout = 30000;
+        private int maxRetries = 2;
+    }
 
     @Getter
     @Setter

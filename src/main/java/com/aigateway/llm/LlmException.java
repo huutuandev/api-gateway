@@ -6,6 +6,8 @@ package com.aigateway.llm;
  */
 public class LlmException extends RuntimeException {
 
+    private Integer statusCode;
+
     public LlmException(String message) {
         super(message);
     }
@@ -14,10 +16,20 @@ public class LlmException extends RuntimeException {
         super(message, cause);
     }
 
+    public LlmException(String message, Integer statusCode) {
+        super(message);
+        this.statusCode = statusCode;
+    }
+
+    public Integer getStatusCode() {
+        return statusCode;
+    }
+
     /** Provider returned a non-2xx HTTP status. */
     public static LlmException httpError(String provider, int statusCode, String body) {
         return new LlmException(
-                String.format("[%s] LLM API returned HTTP %d: %s", provider, statusCode, body)
+                String.format("[%s] LLM API returned HTTP %d: %s", provider, statusCode, body),
+                statusCode
         );
     }
 
