@@ -1,5 +1,6 @@
-package com.aigateway.security;
+package com.aigateway.security.jwt;
 
+import com.aigateway.security.user.CustomUserDetails;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,8 +49,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
+                var userDetails = CustomUserDetails.builder()
+                        .id(userId)
+                        .username(email)
+                        .password("") // Credentials are not needed post-JWT
+                        .authorities(authorities)
+                        .enabled(true)
+                        .build();
+
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        email,          // principal
+                        userDetails,    // principal
                         null,           // credentials (cleared)
                         authorities
                 );

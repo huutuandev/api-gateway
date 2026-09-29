@@ -28,15 +28,6 @@ public class ConversationService {
     private final MessageRepository      messageRepository;
     private final UserRepository         userRepository;
 
-    // ── Create conversation ───────────────────────────────────────────────────
-
-    /**
-     * Create a new, empty conversation belonging to the given user.
-     *
-     * @param userId  authenticated user's id (from JWT)
-     * @param request optional title
-     * @return lightweight ConversationResponse (no messages)
-     */
     @Transactional
     public ConversationResponse createConversation(Long userId,
                                                    CreateConversationRequest request) {
@@ -54,17 +45,6 @@ public class ConversationService {
         return toConversationResponse(saved);
     }
 
-    // ── Add message ───────────────────────────────────────────────────────────
-
-    /**
-     * Append a message to a conversation.
-     * Ownership is enforced: only the conversation's owner can add messages.
-     *
-     * @param userId         authenticated user's id
-     * @param conversationId target conversation
-     * @param request        role + content
-     * @return MessageResponse
-     */
     @Transactional
     public MessageResponse addMessage(Long userId,
                                       Long conversationId,
@@ -88,16 +68,6 @@ public class ConversationService {
         return toMessageResponse(saved);
     }
 
-    // ── Get history ───────────────────────────────────────────────────────────
-
-    /**
-     * Load a conversation with its full ordered message history.
-     * Uses a JOIN FETCH to avoid N+1 queries.
-     *
-     * @param userId         authenticated user's id (ownership check)
-     * @param conversationId target conversation
-     * @return ConversationDetailResponse with messages ordered by createdAt ASC
-     */
     @Transactional(readOnly = true)
     public ConversationDetailResponse getHistory(Long userId, Long conversationId) {
 
@@ -123,15 +93,6 @@ public class ConversationService {
                 .build();
     }
 
-    // ── List conversations ────────────────────────────────────────────────────
-
-    /**
-     * List all conversations for a user, newest-updated first.
-     * Does NOT load messages (lightweight).
-     *
-     * @param userId authenticated user's id
-     * @return list of ConversationResponse summaries
-     */
     @Transactional(readOnly = true)
     public List<ConversationResponse> listConversations(Long userId) {
         return conversationRepository
@@ -141,7 +102,7 @@ public class ConversationService {
                 .toList();
     }
 
-    // ── Mappers ───────────────────────────────────────────────────────────────
+
 
     private ConversationResponse toConversationResponse(Conversation c) {
         return ConversationResponse.builder()

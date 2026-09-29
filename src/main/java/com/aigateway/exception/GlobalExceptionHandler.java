@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GlobalExceptionHandler {
 
-    // ── 409 Conflict ─────────────────────────────────────────────────────────
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<Map<String, Object>> handleEmailAlreadyExists(
             EmailAlreadyExistsException ex,
@@ -27,7 +26,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, "Email already exists", request, ex);
     }
 
-    // ── 401 Unauthorized: bad credentials ────────────────────────────────────
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidCredentials(
             InvalidCredentialsException ex,
@@ -36,7 +34,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, "Invalid credentials", request, ex);
     }
 
-    // ── 401 Unauthorized: invalid/expired token ───────────────────────────────
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidToken(
             InvalidTokenException ex,
@@ -45,7 +42,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request, ex);
     }
 
-    // ── 401 Unauthorized: generic Spring Security auth exception ───────────────
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(
             org.springframework.security.core.AuthenticationException ex,
@@ -54,7 +50,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, "Authentication failed: " + ex.getMessage(), request, ex);
     }
 
-    // ── 403 Forbidden: Spring Security access denied ──────────────────────────
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(
             org.springframework.security.access.AccessDeniedException ex,
@@ -63,7 +58,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.FORBIDDEN, "Access denied", request, ex);
     }
 
-    // ── 404 Not Found ─────────────────────────────────────────────────────────
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(
             ResourceNotFoundException ex,
@@ -72,7 +66,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request, ex);
     }
 
-    // ── 502 Bad Gateway / 504 Gateway Timeout: LLM provider error ────────────
     @ExceptionHandler(com.aigateway.llm.LlmException.class)
     public ResponseEntity<Map<String, Object>> handleLlmError(
             com.aigateway.llm.LlmException ex,
@@ -87,7 +80,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_GATEWAY, "LLM provider is currently unavailable", request, ex);
     }
 
-    // ── 429 Too Many Requests: Rate limit exceeded ───────────────────────────
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(
             RateLimitExceededException ex,
@@ -97,7 +89,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request, ex);
     }
 
-    // ── 400 Validation errors ─────────────────────────────────────────────────
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(
             MethodArgumentNotValidException ex,
@@ -112,7 +103,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, message, request, ex);
     }
 
-    // ── 500 Fallback ──────────────────────────────────────────────────────────
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(
             Exception ex,
@@ -126,7 +116,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // ── Helper ────────────────────────────────────────────────────────────────
     private ResponseEntity<Map<String, Object>> buildResponse(
             HttpStatus status,
             String message,

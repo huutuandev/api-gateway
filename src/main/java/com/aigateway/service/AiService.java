@@ -28,16 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Orchestrates LLM calls and conversation persistence:
- *   1. Load or create Conversation
- *   2. Save USER message to DB
- *   3. Build LlmMessage context history
- *   4. Call LlmProvider.complete()
- *   5. Save ASSISTANT message to DB
- *   6. Persist AiRequest audit record
- *   7. Return ChatResponse
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -56,7 +47,7 @@ public class AiService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: id=" + userId));
 
-        // 1. Resolve or create conversation
+
         Conversation conversation;
         if (request.getConversationId() != null) {
             conversation = conversationRepository.findWithMessagesByIdAndUserId(request.getConversationId(), userId)
@@ -65,7 +56,7 @@ public class AiService {
             conversation = new Conversation();
             conversation.setUser(user);
             
-            // Auto-generate title from the first message
+
             String content = request.getMessage();
             String title = content.length() > 50 ? content.substring(0, 47) + "..." : content;
             conversation.setTitle(title);
@@ -74,7 +65,7 @@ public class AiService {
             log.debug("Created new conversation: id={}", conversation.getId());
         }
 
-        // 2. Save USER message
+
         Message userMsg = Message.builder()
                 .conversation(conversation)
                 .role(MessageRole.USER)
@@ -82,10 +73,10 @@ public class AiService {
                 .build();
         userMsg = messageRepository.save(userMsg);
         
-        // Add to the local entity list so it's included in the LLM context
+
         conversation.getMessages().add(userMsg);
 
-        // 3. Build context history
+
         List<LlmMessage> messages = conversation.getMessages().stream()
                 .map(m -> new LlmMessage(m.getRole(), m.getContent()))
                 .toList();
@@ -97,7 +88,7 @@ public class AiService {
         log.info("AI chat: userId={}, conversationId={}, model={}, contextSize={}", 
                  userId, conversation.getId(), model, messages.size());
 
-        // 4. Call LLM
+
         LlmResponse llmResponse;
         AiRequestStatus status;
         String errorMessage = null;
@@ -121,7 +112,7 @@ public class AiService {
             throw ex;
         }
 
-        // 5. Save ASSISTANT message
+
         Message assistantMsg = Message.builder()
                 .conversation(conversation)
                 .role(MessageRole.ASSISTANT)
@@ -130,7 +121,7 @@ public class AiService {
                 .build();
         assistantMsg = messageRepository.save(assistantMsg);
 
-        // 6. Persist audit record
+
         persistAuditRecord(user, conversation, llmResponse.model(),
                 llmResponse.promptTokens(), llmResponse.completionTokens(),
                 llmResponse.totalTokens(), llmResponse.latencyMs(),
@@ -139,7 +130,7 @@ public class AiService {
         log.info("AI chat completed: userId={}, conversationId={}, model={}, duration={}ms, status={}",
                  userId, conversation.getId(), llmResponse.model(), llmResponse.latencyMs(), status);
 
-        // 7. Return response
+
         return buildChatResponse(conversation.getId(), assistantMsg, llmResponse);
     }
 

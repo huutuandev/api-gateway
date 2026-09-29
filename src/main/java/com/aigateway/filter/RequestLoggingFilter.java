@@ -23,7 +23,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
     private static final String MDC_REQUEST_ID = "requestId";
-    private static final String MDC_USER_ID = "userId"; // Used by JwtAuthenticationFilter
+    private static final String MDC_USER_ID = "userId";
 
     @Override
     protected void doFilterInternal(

@@ -1,8 +1,8 @@
-package com.aigateway.config;
+package com.aigateway.security;
 
-import com.aigateway.security.DelegatedAccessDeniedHandler;
-import com.aigateway.security.DelegatedAuthenticationEntryPoint;
-import com.aigateway.security.JwtAuthenticationFilter;
+import com.aigateway.security.handle.DelegatedAccessDeniedHandler;
+import com.aigateway.security.handle.DelegatedAuthenticationEntryPoint;
+import com.aigateway.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

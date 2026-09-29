@@ -12,14 +12,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.List;
 import java.util.Map;
 
-/**
- * LlmProvider implementation for the Groq API (which is OpenAI compatible).
- *
- * Endpoint: POST /openai/v1/chat/completions
- * Docs:     https://console.groq.com/docs/api-reference
- *
- * API key is never logged. Token usage fields are null-safe.
- */
+
 @Component
 @Slf4j
 public class GroqLlmProvider implements LlmProvider {
@@ -33,10 +26,7 @@ public class GroqLlmProvider implements LlmProvider {
     private final RestClient        restClient;
     private final AiProperties      aiProperties;
 
-    /**
-     * Explicit constructor — allows Mockito @InjectMocks to work without @Qualifier.
-     * The RestClient bean named "aiRestClient" is injected by Spring via LlmConfig.
-     */
+
     public GroqLlmProvider(
             RestClient aiRestClient,
             AiProperties aiProperties
@@ -44,8 +34,6 @@ public class GroqLlmProvider implements LlmProvider {
         this.restClient      = aiRestClient;
         this.aiProperties = aiProperties;
     }
-
-    // ── LlmProvider ───────────────────────────────────────────────────────────
 
     @Override
     public String providerName() {
@@ -103,8 +91,6 @@ public class GroqLlmProvider implements LlmProvider {
         return false;
     }
 
-    // ── HTTP call ─────────────────────────────────────────────────────────────
-
     private GroqResponse callApi(List<LlmMessage> messages, String model) {
         List<Map<String, String>> messagePayload = messages.stream()
                 .map(m -> Map.of("role", m.roleAsString(), "content", m.content()))
@@ -144,8 +130,6 @@ public class GroqLlmProvider implements LlmProvider {
         }
     }
 
-    // ── Mapping ───────────────────────────────────────────────────────────────
-
     private LlmResponse toLlmResponse(GroqResponse r, long latencyMs) {
         if (r.choices() == null || r.choices().isEmpty()) {
             throw LlmException.parseError(PROVIDER,
@@ -172,8 +156,6 @@ public class GroqLlmProvider implements LlmProvider {
 
         return new LlmResponse(r.model(), content, promptTokens, completionTokens, totalTokens, latencyMs);
     }
-
-    // ── Internal response DTOs (Groq/OpenAI wire format) ──────────────────────
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record GroqResponse(String model, List<Choice> choices, Usage usage) {}

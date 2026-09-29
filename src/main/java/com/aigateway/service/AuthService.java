@@ -12,7 +12,7 @@ import com.aigateway.enums.UserRole;
 import com.aigateway.exception.EmailAlreadyExistsException;
 import com.aigateway.exception.InvalidCredentialsException;
 import com.aigateway.repository.UserRepository;
-import com.aigateway.security.JwtService;
+import com.aigateway.security.jwt.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,7 +30,7 @@ public class AuthService {
     private final RefreshTokenService  refreshTokenService;
     private final JwtProperties        jwtProperties;
 
-    // ── Register ──────────────────────────────────────────────────────────────
+
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -52,7 +52,7 @@ public class AuthService {
         return toUserResponse(saved);
     }
 
-    // ── Login ─────────────────────────────────────────────────────────────────
+
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
@@ -81,17 +81,17 @@ public class AuthService {
         return buildAuthResponse(accessToken, refreshToken);
     }
 
-    // ── Refresh ───────────────────────────────────────────────────────────────
+
 
     public AuthResponse refresh(RefreshTokenRequest request) {
 
-        // Validate + extract userId (throws InvalidTokenException if not in Redis)
+
         Long userId = refreshTokenService.validateAndExtractUserId(request.getRefreshToken());
 
-        // Rotate: delete old token
+
         refreshTokenService.deleteRefreshToken(request.getRefreshToken());
 
-        // Load user to rebuild claims
+
         User user = userRepository.findById(userId)
                 .orElseThrow(InvalidCredentialsException::new);
 
@@ -99,7 +99,7 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
-        // Issue new tokens
+
         String newAccessToken  = jwtService.generateAccessToken(user);
         String newRefreshToken = refreshTokenService.createRefreshToken(userId);
 
@@ -108,14 +108,14 @@ public class AuthService {
         return buildAuthResponse(newAccessToken, newRefreshToken);
     }
 
-    // ── Logout ────────────────────────────────────────────────────────────────
+
 
     public void logout(LogoutRequest request) {
         refreshTokenService.deleteRefreshToken(request.getRefreshToken());
         log.info("User logout: refreshToken deleted");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+
 
     private AuthResponse buildAuthResponse(String accessToken, String refreshToken) {
         return AuthResponse.builder()
