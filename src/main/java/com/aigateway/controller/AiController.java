@@ -1,6 +1,8 @@
 package com.aigateway.controller;
 
+import com.aigateway.dto.request.AnalyzeRequest;
 import com.aigateway.dto.request.ChatRequest;
+import com.aigateway.dto.response.AnalyzeResponse;
 import com.aigateway.dto.response.ChatResponse;
 import com.aigateway.security.user.CustomUserDetails;
 import com.aigateway.security.jwt.JwtService;
@@ -32,10 +34,22 @@ public class AiController {
     ) {
         Long userId = principal.getId();
         
-        // Enforce rate limit before calling LLM
         rateLimitService.enforceAiChatRateLimit(userId);
         
         ChatResponse response = aiService.chat(userId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/analyze")
+    public ResponseEntity<AnalyzeResponse> analyze(
+            @Valid @RequestBody AnalyzeRequest request,
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        Long userId = principal.getId();
+        
+        rateLimitService.enforceAiChatRateLimit(userId);
+        
+        AnalyzeResponse response = aiService.analyze(userId, request);
         return ResponseEntity.ok(response);
     }
 

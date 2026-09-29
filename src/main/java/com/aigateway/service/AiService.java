@@ -22,6 +22,10 @@ import com.aigateway.repository.MessageRepository;
 import com.aigateway.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.aigateway.dto.request.AnalyzeRequest;
+import com.aigateway.dto.response.AnalyzeResponse;
+import com.aigateway.dto.response.AnalyzeResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +44,7 @@ public class AiService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository      messageRepository;
     private final AiProperties           aiProperties;
+    private final ObjectMapper           objectMapper = new ObjectMapper();
 
     @Transactional
     public ChatResponse chat(Long userId, ChatRequest request) {
@@ -132,6 +137,96 @@ public class AiService {
 
 
         return buildChatResponse(conversation.getId(), assistantMsg, llmResponse);
+    }
+
+    @Transactional
+    public AnalyzeResponse analyze(Long userId, AnalyzeRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: id=" + userId));
+
+        String systemPrompt = "You are a text analysis assistant. Analyze the given text and return ONLY a valid JSON object with this exact structure, no markdown, no backticks:\n" +
+                              "{\n" +
+                              "  \"summary\": \"Brief summary string\",\n" +
+                              "  \"sentiment\": \"POSITIVE, NEGATIVE, or NEUTRAL\",\n" +
+                              "  \"topics\": [\"topic1\", \"topic2\"]\n" +
+                              "}";
+
+        List<LlmMessage> messages = List.of(
+                new LlmMessage(MessageRole.SYSTEM, systemPrompt),
+                new LlmMessage(MessageRole.USER, request.getContent())
+        );
+
+        String model = aiProperties.getDefaultModel();
+
+        log.info("AI analyze: userId={}, model={}", userId, model);
+
+        LlmResponse llmResponse;
+        AiRequestStatus status;
+        String errorMessage = null;
+
+        long startAiTime = System.currentTimeMillis();
+
+        try {
+            llmResponse = llmProvider.complete(messages, model);
+            status = AiRequestStatus.SUCCESS;
+        } catch (LlmException ex) {
+            long failDuration = System.currentTimeMillis() - startAiTime;
+            status = ex.getMessage() != null && ex.getMessage().contains("timed out")
+                    ? AiRequestStatus.TIMEOUT
+                    : AiRequestStatus.FAILED;
+            errorMessage = ex.getMessage();
+            log.warn("LLM analyze failed: userId={}, model={}, duration={}ms, status={}, error={}", 
+                     userId, model, failDuration, status, errorMessage);
+
+            persistAuditRecord(user, null, model, null, null, null, failDuration, status, errorMessage);
+            throw ex;
+        }
+
+        AnalyzeResult result;
+        try {
+            String rawContent = llmResponse.content().trim();
+            if (rawContent.startsWith("```json")) {
+                rawContent = rawContent.substring(7);
+                if (rawContent.endsWith("```")) {
+                    rawContent = rawContent.substring(0, rawContent.length() - 3);
+                }
+            } else if (rawContent.startsWith("```")) {
+                rawContent = rawContent.substring(3);
+                if (rawContent.endsWith("```")) {
+                    rawContent = rawContent.substring(0, rawContent.length() - 3);
+                }
+            }
+            result = objectMapper.readValue(rawContent.trim(), AnalyzeResult.class);
+        } catch (Exception ex) {
+            long duration = System.currentTimeMillis() - startAiTime;
+            String parseError = "Failed to parse JSON: " + ex.getMessage();
+            log.warn("LLM analyze parse failed: userId={}, model={}, error={}", userId, model, parseError);
+            persistAuditRecord(user, null, model, llmResponse.promptTokens(), llmResponse.completionTokens(), llmResponse.totalTokens(), duration, AiRequestStatus.FAILED, parseError);
+            throw new LlmException("Failed to parse LLM structured output", ex);
+        }
+
+        persistAuditRecord(user, null, llmResponse.model(),
+                llmResponse.promptTokens(), llmResponse.completionTokens(),
+                llmResponse.totalTokens(), llmResponse.latencyMs(),
+                status, null);
+
+        log.info("AI analyze completed: userId={}, model={}, duration={}ms, status={}",
+                 userId, llmResponse.model(), llmResponse.latencyMs(), status);
+
+        ChatResponse.TokenUsage usage = null;
+        if (llmResponse.hasUsage()) {
+            usage = ChatResponse.TokenUsage.builder()
+                    .promptTokens(llmResponse.promptTokens())
+                    .completionTokens(llmResponse.completionTokens())
+                    .totalTokens(llmResponse.totalTokens())
+                    .build();
+        }
+
+        return AnalyzeResponse.builder()
+                .result(result)
+                .usage(usage)
+                .latencyMs(llmResponse.latencyMs())
+                .build();
     }
 
     private void persistAuditRecord(
