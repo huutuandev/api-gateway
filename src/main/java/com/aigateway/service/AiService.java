@@ -4,6 +4,7 @@ import com.aigateway.config.AiProperties;
 import com.aigateway.dto.request.ChatRequest;
 import com.aigateway.dto.response.ChatResponse;
 import com.aigateway.dto.response.MessageResponse;
+import com.aigateway.dto.response.UsageResponse;
 import com.aigateway.entity.AiRequest;
 import com.aigateway.entity.Conversation;
 import com.aigateway.entity.Message;
@@ -161,6 +162,17 @@ public class AiService {
                 .build();
 
         aiRequestRepository.save(record);
+    }
+
+    @Transactional(readOnly = true)
+    public UsageResponse getUsageStats(Long userId) {
+        AiRequestRepository.UsageStatsProjection projection = aiRequestRepository.getUsageStatsByUserId(userId);
+        return UsageResponse.builder()
+                .requests(projection.getRequests())
+                .tokens(projection.getTokens())
+                .averageLatencyMs(projection.getAverageLatencyMs())
+                .errorRate(projection.getErrorRate())
+                .build();
     }
 
     private ChatResponse buildChatResponse(Long conversationId, Message assistantMsg, LlmResponse r) {

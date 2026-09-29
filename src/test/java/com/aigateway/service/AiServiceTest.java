@@ -208,4 +208,27 @@ class AiServiceTest {
             verifyNoInteractions(llmProvider);
         }
     }
+
+    // ── getUsageStats() ───────────────────────────────────────────────────────
+
+    @Nested @DisplayName("getUsageStats()")
+    class UsageTests {
+        @Test @DisplayName("Returns aggregated usage correctly")
+        void getUsageStats_success() {
+            AiRequestRepository.UsageStatsProjection projection = mock(AiRequestRepository.UsageStatsProjection.class);
+            when(projection.getRequests()).thenReturn(150L);
+            when(projection.getTokens()).thenReturn(1000L);
+            when(projection.getAverageLatencyMs()).thenReturn(450.5);
+            when(projection.getErrorRate()).thenReturn(0.05);
+
+            when(aiRequestRepository.getUsageStatsByUserId(1L)).thenReturn(projection);
+
+            com.aigateway.dto.response.UsageResponse response = aiService.getUsageStats(1L);
+
+            assertThat(response.getRequests()).isEqualTo(150L);
+            assertThat(response.getTokens()).isEqualTo(1000L);
+            assertThat(response.getAverageLatencyMs()).isEqualTo(450.5);
+            assertThat(response.getErrorRate()).isEqualTo(0.05);
+        }
+    }
 }
