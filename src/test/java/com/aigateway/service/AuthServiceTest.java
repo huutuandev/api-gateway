@@ -13,7 +13,7 @@ import com.aigateway.exception.EmailAlreadyExistsException;
 import com.aigateway.exception.InvalidCredentialsException;
 import com.aigateway.exception.InvalidTokenException;
 import com.aigateway.repository.UserRepository;
-import com.aigateway.security.JwtService;
+import com.aigateway.security.jwt.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

@@ -28,12 +28,6 @@ public class RefreshTokenService {
     private final StringRedisTemplate redisTemplate;
     private final JwtProperties jwtProperties;
 
-    // ── Create ────────────────────────────────────────────────────────────────
-
-    /**
-     * Generate a new refresh token, store it in Redis, and return the
-     * opaque token string "{userId}:{tokenId}".
-     */
     public String createRefreshToken(Long userId) {
         String tokenId = UUID.randomUUID().toString();
         String redisKey = buildKey(userId, tokenId);
@@ -48,11 +42,6 @@ public class RefreshTokenService {
         return encode(userId, tokenId);
     }
 
-    // ── Validate ──────────────────────────────────────────────────────────────
-
-    /**
-     * Return true only if the Redis key for this token still exists.
-     */
     public boolean exists(String refreshToken) {
         try {
             Parts parts = decode(refreshToken);
@@ -64,13 +53,6 @@ public class RefreshTokenService {
         }
     }
 
-    // ── Rotate ────────────────────────────────────────────────────────────────
-
-    /**
-     * Validate, delete old token, and return the userId so a new token can
-     * be generated. Throws {@link com.aigateway.exception.InvalidTokenException}
-     * if the token is not in Redis.
-     */
     public Long validateAndExtractUserId(String refreshToken) {
         Parts parts = decode(refreshToken);
         String key = buildKey(parts.userId(), parts.tokenId());
@@ -84,9 +66,6 @@ public class RefreshTokenService {
         return parts.userId();
     }
 
-    /**
-     * Delete the old refresh token from Redis.
-     */
     public void deleteRefreshToken(String refreshToken) {
         try {
             Parts parts = decode(refreshToken);
@@ -97,18 +76,14 @@ public class RefreshTokenService {
         }
     }
 
-    // ── Internal ──────────────────────────────────────────────────────────────
-
     private String buildKey(Long userId, String tokenId) {
         return KEY_PREFIX + userId + ":" + tokenId;
     }
 
-    /** Encode as "{userId}:{tokenId}" for the opaque token value sent to client. */
     private String encode(Long userId, String tokenId) {
         return userId + ":" + tokenId;
     }
 
-    /** Decode "{userId}:{tokenId}" back to its parts. */
     private Parts decode(String token) {
         if (token == null || !token.contains(":")) {
             throw new com.aigateway.exception.InvalidTokenException(

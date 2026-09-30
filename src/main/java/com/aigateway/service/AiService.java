@@ -1,0 +1,291 @@
+package com.aigateway.service;
+
+import com.aigateway.config.AiProperties;
+import com.aigateway.dto.request.ChatRequest;
+import com.aigateway.dto.response.ChatResponse;
+import com.aigateway.dto.response.MessageResponse;
+import com.aigateway.dto.response.UsageResponse;
+import com.aigateway.entity.AiRequest;
+import com.aigateway.entity.Conversation;
+import com.aigateway.entity.Message;
+import com.aigateway.entity.User;
+import com.aigateway.enums.AiRequestStatus;
+import com.aigateway.enums.MessageRole;
+import com.aigateway.exception.ResourceNotFoundException;
+import com.aigateway.llm.LlmException;
+import com.aigateway.llm.LlmMessage;
+import com.aigateway.llm.LlmProvider;
+import com.aigateway.llm.LlmResponse;
+import com.aigateway.repository.AiRequestRepository;
+import com.aigateway.repository.ConversationRepository;
+import com.aigateway.repository.MessageRepository;
+import com.aigateway.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import com.aigateway.dto.request.AnalyzeRequest;
+import com.aigateway.dto.response.AnalyzeResponse;
+import com.aigateway.dto.response.AnalyzeResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class AiService {
+
+    private final LlmProvider          llmProvider;
+    private final AiRequestRepository  aiRequestRepository;
+    private final UserRepository       userRepository;
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository      messageRepository;
+    private final AiProperties           aiProperties;
+    private final ObjectMapper           objectMapper = new ObjectMapper();
+
+    @Transactional
+    public ChatResponse chat(Long userId, ChatRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: id=" + userId));
+
+
+        Conversation conversation;
+        if (request.getConversationId() != null) {
+            conversation = conversationRepository.findWithMessagesByIdAndUserId(request.getConversationId(), userId)
+                    .orElseThrow(() -> ResourceNotFoundException.conversation(request.getConversationId()));
+        } else {
+            conversation = new Conversation();
+            conversation.setUser(user);
+            
+
+            String content = request.getMessage();
+            String title = content.length() > 50 ? content.substring(0, 47) + "..." : content;
+            conversation.setTitle(title);
+            
+            conversation = conversationRepository.save(conversation);
+            log.debug("Created new conversation: id={}", conversation.getId());
+        }
+
+
+        Message userMsg = Message.builder()
+                .conversation(conversation)
+                .role(MessageRole.USER)
+                .content(request.getMessage())
+                .build();
+        userMsg = messageRepository.save(userMsg);
+        
+
+        conversation.getMessages().add(userMsg);
+
+
+        List<LlmMessage> messages = conversation.getMessages().stream()
+                .map(m -> new LlmMessage(m.getRole(), m.getContent()))
+                .toList();
+
+        String model = (request.getModel() != null && !request.getModel().isBlank())
+                ? request.getModel()
+                : aiProperties.getDefaultModel();
+
+        log.info("AI chat: userId={}, conversationId={}, model={}, contextSize={}", 
+                 userId, conversation.getId(), model, messages.size());
+
+
+        LlmResponse llmResponse;
+        AiRequestStatus status;
+        String errorMessage = null;
+
+        long startAiTime = System.currentTimeMillis();
+
+        try {
+            llmResponse = llmProvider.complete(messages, model);
+            status = AiRequestStatus.SUCCESS;
+
+        } catch (LlmException ex) {
+            long failDuration = System.currentTimeMillis() - startAiTime;
+            status = ex.getMessage() != null && ex.getMessage().contains("timed out")
+                    ? AiRequestStatus.TIMEOUT
+                    : AiRequestStatus.FAILED;
+            errorMessage = ex.getMessage();
+            log.warn("LLM call failed: userId={}, conversationId={}, model={}, duration={}ms, status={}, error={}", 
+                     userId, conversation.getId(), model, failDuration, status, errorMessage);
+
+            persistAuditRecord(user, conversation, model, null, null, null, failDuration, status, errorMessage);
+            throw ex;
+        }
+
+
+        Message assistantMsg = Message.builder()
+                .conversation(conversation)
+                .role(MessageRole.ASSISTANT)
+                .content(llmResponse.content())
+                .tokenCount(llmResponse.completionTokens())
+                .build();
+        assistantMsg = messageRepository.save(assistantMsg);
+
+
+        persistAuditRecord(user, conversation, llmResponse.model(),
+                llmResponse.promptTokens(), llmResponse.completionTokens(),
+                llmResponse.totalTokens(), llmResponse.latencyMs(),
+                status, null);
+
+        log.info("AI chat completed: userId={}, conversationId={}, model={}, duration={}ms, status={}",
+                 userId, conversation.getId(), llmResponse.model(), llmResponse.latencyMs(), status);
+
+
+        return buildChatResponse(conversation.getId(), assistantMsg, llmResponse);
+    }
+
+    @Transactional
+    public AnalyzeResponse analyze(Long userId, AnalyzeRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: id=" + userId));
+
+        String systemPrompt = "You are a text analysis assistant. Analyze the given text and return ONLY a valid JSON object with this exact structure, no markdown, no backticks:\n" +
+                              "{\n" +
+                              "  \"summary\": \"Brief summary string\",\n" +
+                              "  \"sentiment\": \"POSITIVE, NEGATIVE, or NEUTRAL\",\n" +
+                              "  \"topics\": [\"topic1\", \"topic2\"]\n" +
+                              "}";
+
+        List<LlmMessage> messages = List.of(
+                new LlmMessage(MessageRole.SYSTEM, systemPrompt),
+                new LlmMessage(MessageRole.USER, request.getContent())
+        );
+
+        String model = aiProperties.getDefaultModel();
+
+        log.info("AI analyze: userId={}, model={}", userId, model);
+
+        LlmResponse llmResponse;
+        AiRequestStatus status;
+        String errorMessage = null;
+
+        long startAiTime = System.currentTimeMillis();
+
+        try {
+            llmResponse = llmProvider.complete(messages, model);
+            status = AiRequestStatus.SUCCESS;
+        } catch (LlmException ex) {
+            long failDuration = System.currentTimeMillis() - startAiTime;
+            status = ex.getMessage() != null && ex.getMessage().contains("timed out")
+                    ? AiRequestStatus.TIMEOUT
+                    : AiRequestStatus.FAILED;
+            errorMessage = ex.getMessage();
+            log.warn("LLM analyze failed: userId={}, model={}, duration={}ms, status={}, error={}", 
+                     userId, model, failDuration, status, errorMessage);
+
+            persistAuditRecord(user, null, model, null, null, null, failDuration, status, errorMessage);
+            throw ex;
+        }
+
+        AnalyzeResult result;
+        try {
+            String rawContent = llmResponse.content().trim();
+            if (rawContent.startsWith("```json")) {
+                rawContent = rawContent.substring(7);
+                if (rawContent.endsWith("```")) {
+                    rawContent = rawContent.substring(0, rawContent.length() - 3);
+                }
+            } else if (rawContent.startsWith("```")) {
+                rawContent = rawContent.substring(3);
+                if (rawContent.endsWith("```")) {
+                    rawContent = rawContent.substring(0, rawContent.length() - 3);
+                }
+            }
+            result = objectMapper.readValue(rawContent.trim(), AnalyzeResult.class);
+        } catch (Exception ex) {
+            long duration = System.currentTimeMillis() - startAiTime;
+            String parseError = "Failed to parse JSON: " + ex.getMessage();
+            log.warn("LLM analyze parse failed: userId={}, model={}, error={}", userId, model, parseError);
+            persistAuditRecord(user, null, model, llmResponse.promptTokens(), llmResponse.completionTokens(), llmResponse.totalTokens(), duration, AiRequestStatus.FAILED, parseError);
+            throw new LlmException("Failed to parse LLM structured output", ex);
+        }
+
+        persistAuditRecord(user, null, llmResponse.model(),
+                llmResponse.promptTokens(), llmResponse.completionTokens(),
+                llmResponse.totalTokens(), llmResponse.latencyMs(),
+                status, null);
+
+        log.info("AI analyze completed: userId={}, model={}, duration={}ms, status={}",
+                 userId, llmResponse.model(), llmResponse.latencyMs(), status);
+
+        ChatResponse.TokenUsage usage = null;
+        if (llmResponse.hasUsage()) {
+            usage = ChatResponse.TokenUsage.builder()
+                    .promptTokens(llmResponse.promptTokens())
+                    .completionTokens(llmResponse.completionTokens())
+                    .totalTokens(llmResponse.totalTokens())
+                    .build();
+        }
+
+        return AnalyzeResponse.builder()
+                .result(result)
+                .usage(usage)
+                .latencyMs(llmResponse.latencyMs())
+                .build();
+    }
+
+    private void persistAuditRecord(
+            User user, Conversation conversation, String model,
+            Integer promptTokens, Integer completionTokens, Integer totalTokens,
+            Long latencyMs, AiRequestStatus status, String errorMessage) {
+
+        AiRequest record = AiRequest.builder()
+                .requestId(UUID.randomUUID())
+                .user(user)
+                .conversation(conversation)
+                .model(model)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(totalTokens)
+                .latencyMs(latencyMs)
+                .status(status)
+                .errorMessage(errorMessage)
+                .build();
+
+        aiRequestRepository.save(record);
+    }
+
+    @Transactional(readOnly = true)
+    public UsageResponse getUsageStats(Long userId) {
+        AiRequestRepository.UsageStatsProjection projection = aiRequestRepository.getUsageStatsByUserId(userId);
+        return UsageResponse.builder()
+                .requests(projection.getRequests())
+                .tokens(projection.getTokens())
+                .averageLatencyMs(projection.getAverageLatencyMs())
+                .errorRate(projection.getErrorRate())
+                .build();
+    }
+
+    private ChatResponse buildChatResponse(Long conversationId, Message assistantMsg, LlmResponse r) {
+        ChatResponse.TokenUsage usage = null;
+        if (r.hasUsage()) {
+            usage = ChatResponse.TokenUsage.builder()
+                    .promptTokens(r.promptTokens())
+                    .completionTokens(r.completionTokens())
+                    .totalTokens(r.totalTokens())
+                    .build();
+        }
+
+        MessageResponse msgResponse = MessageResponse.builder()
+                .id(assistantMsg.getId())
+                .role(assistantMsg.getRole())
+                .content(assistantMsg.getContent())
+                .tokenCount(assistantMsg.getTokenCount())
+                .createdAt(assistantMsg.getCreatedAt())
+                .build();
+
+        return ChatResponse.builder()
+                .conversationId(conversationId)
+                .message(msgResponse)
+                .usage(usage)
+                .requestId(UUID.randomUUID().toString())
+                .model(r.model())
+                .latencyMs(r.latencyMs())
+                .build();
+    }
+}

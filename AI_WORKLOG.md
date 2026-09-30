@@ -237,4 +237,177 @@ Remaining:
 
 ---
 
-*Worklog được tạo ngày 2026-09-27. Thông tin được reconstruct từ source code và conversation context.*
+## Day 2 — 2026-09-27
+
+### 1. AI Tools Used
+
+| Tool | Role |
+|------|------|
+| **Antigravity** (Google DeepMind) | Primary AI assistant — architecture design, code generation, debugging, rate limit implementation, end-to-end testing |
+
+> Không có bằng chứng về việc sử dụng thêm các AI tool khác (ChatGPT, Gemini, Copilot, v.v.) trong session này.
+
+---
+
+### 2. Prompts Used
+
+Trong Day 2, developer đã yêu cầu các tính năng chính sau:
+
+**Prompt 1 — LLM Integration (OpenAI → Groq)**
+```
+Bạn đang làm việc trên project AI Gateway bằng Spring Boot.
+Hãy giúp tôi chuyển đổi toàn bộ project Spring Boot hiện tại từ OpenAI sang Groq.
+base-url phải là: https://api.groq.com/openai/v1
+Model mặc định: llama-3.3-70b-versatile
+API key dùng biến môi trường: ${AI_API_KEY} hoặc ${GROQ_API_KEY}
+```
+
+**Prompt 2 — Conversation & Message Entities**
+```
+Thiết kế và implement việc lưu lịch sử hội thoại: User -> Conversation -> Message
+Message phải phân biệt được USER, ASSISTANT, SYSTEM.
+Tạo Repository, Service.
+```
+
+**Prompt 3 — AI Chat API + AI Request Logging**
+```
+Tạo API POST /ai/chat.
+Flow: JWT -> Get User -> Conversation -> LLM API -> Save Message -> Save AI Request Log -> Save Token Usage.
+```
+
+**Prompt 4 — Rate Limit + Final Verification**
+```
+Implement rate limiting cho POST /ai/chat.
+Rate limit phải được áp dụng sau JWT authentication, theo user.
+Nếu vượt rate limit -> 429 Too Many Requests.
+Nếu đã có Redis thì ưu tiên Redis. Cuối cùng thực hiện end-to-end test flow.
+```
+
+---
+
+### 3. AI Suggestions
+
+Antigravity đã đề xuất và implement các điểm sau trong Day 2:
+
+#### LLM Provider Abstraction
+- Abstract `AiService` và `LlmProvider` để dễ dàng switch giữa các AI Models.
+- Đổi cấu hình gọi API sang dùng URL của Groq nhưng format của OpenAI qua WebClient/RestClient.
+- Inject `GROQ_API_KEY` từ `.env` via `spring.config.import`.
+
+#### Conversation History Structure
+- Tạo Entity `Conversation` (chứa `userId`, `title`, timestamps).
+- Tạo Entity `Message` (chứa `conversationId`, `role` (USER/ASSISTANT/SYSTEM), `content`, tokens).
+- Tích hợp lịch sử hội thoại vào `ChatRequest` để LLM hiểu context trước đó (limit contextSize).
+
+#### Rate Limiting với Redis
+- Implement fixed-window rate limit dùng Redis `opsForValue().increment()` kết hợp với `expire()` để atomicity.
+- Redis key format: `ratelimit:ai:chat:user:{userId}`.
+- Giới hạn: 5 requests / 60s (có thể cấu hình trong `AiProperties`).
+- Trả về exception `RateLimitExceededException` được handle bởi `GlobalExceptionHandler` với status `429 Too Many Requests`.
+
+#### End-to-End Verification
+- Phát hiện lỗi Spring Boot không parse được TimeZone `Asia/Saigon` khi kết nối Postgres, AI đã sửa bằng cách inject `UTC` TimeZone vào process.
+- Tạo script PowerShell tự động test flow `Register` -> `Login` -> Call `/ai/chat` 6 lần liên tiếp.
+- Xác nhận các API hoạt động, trả lời bằng AI Model từ Groq và block Request thứ 6 thành công với mã 429.
+
+---
+
+### 4. Bugs Found by AI
+
+| Bug | Cause | Fix | Verification |
+|-----|-------|-----|--------------|
+| Spring Boot startup error `FATAL: invalid value for parameter "TimeZone": "Asia/Saigon"` | PostgreSQL JDBC driver không tương thích với múi giờ default của môi trường Windows | Chạy script JVM với tham số `-Duser.timezone=UTC` hoặc `$env:TZ="UTC"` | Verified — App khởi động thành công |
+| Lỗi 500 khi login | Token `JWT_SECRET` không lấy được do plugin `spring-dotenv` không hoạt động tốt với phiên bản Spring hiện tại | Thay thế thư viện dotenv bằng config native của Spring `spring.config.import=optional:file:.env[.properties]` | Verified — JWT tạo thành công |
+| `Mockito` test RestClient `body()` ambiguous call | `RestClient.RequestBodySpec.body(Object)` bị trùng signature khi compile Test | Rút gọn `any()` bằng `any(Object.class)` | Verified — `mvn test` passing (45/45 tests) |
+
+---
+
+### 5. Day 2 Result
+
+```
+Completed:
+  - Chuyển đổi thành công OpenAI sang Groq (llama-3.3-70b-versatile).
+  - Hoàn thiện database schemas cho Conversation và Message, AI_Request.
+  - POST /api/v1/ai/chat logic hoàn chỉnh, tính toán tổng Token Usage.
+  - Implement Redis Rate Limiting 429.
+  - End-To-End Test passed (JWT, Chat, Rate Limit).
+
+Tested:
+  - mvn clean test: PASS (45 tests passed)
+  - Manual API / e2e_test.ps1: PASS (Đạt 429 cho Request thứ 6).
+
+Remaining:
+  - Project sẵn sàng deploy hoặc bổ sung tính năng mới tùy ý.
+```
+
+---
+
+## Day 3 — Reliability
+
+### Reliability Features
+
+* **Request ID / Request Tracing**: UUID `requestId` được tạo và propagate xuyên suốt request thông qua Servlet Filter (`RequestLoggingFilter`). Request ID xuất hiện trong logs/console (MDC context) và tất cả Exception flow. API / LLM processing có thể trace dễ dàng bằng `requestId`.
+* **Structured Logging**: Cải thiện log detail với thời lượng xử lý (duration) của LLM request, conversation ID và user ID. Log định dạng chuẩn.
+* **LLM Timeout**: Cấu hình thực tế trong `application.yaml` qua `AiProperties`: `connect-timeout: 5000` và `read-timeout: 30000`. Khi timeout, Spring ném ngoại lệ được bắt và biến thành `LlmException.timeout`.
+* **Retry Mechanism**:
+  * **Retry cho**: Timeout, Network error, HTTP 429, HTTP 5xx.
+  * **Không retry cho**: Các lỗi Client Error như HTTP 400, 401, 403, 404 (Fail-fast behavior để tránh tốn tài nguyên).
+  * **Số lần retry**: `max-retries: 2` (tức tối đa 3 lần gọi).
+  * **Backoff**: Exponential backoff (1s, 2s, 4s).
+* **Redis Rate Limiting Integration**: Tích hợp chặt chẽ với `/ai/chat`, đảm bảo limit theo user. Nếu bị chặn, trả HTTP 429 theo chuẩn Global Exception Handler.
+* **Sensitive Data Protection**:
+  * API Key không xuất hiện trong exception response.
+  * Exception cause/internal provider details (e.g. `[groq]`) không bị expose ra client khi lỗi 502.
+  * Password, JWT, Refresh Token tuyệt đối không xuất hiện trong logs.
+* **Exception Handling**:
+  * Validation (MethodArgumentNotValidException) → HTTP 400
+  * Authentication (AuthenticationException, InvalidCredentialsException, InvalidTokenException) → HTTP 401
+  * Authorization (AccessDeniedException) → HTTP 403
+  * Rate-limit (RateLimitExceededException) → HTTP 429
+  * LLM Timeout (LlmException) → HTTP 504
+  * LLM Unavailable (LlmException) → HTTP 502
+  * Unexpected exception (Exception) → HTTP 500 ("An unexpected error occurred" - không expose stack trace).
+
+### Testing
+
+```text
+52/52 Unit/Integration Tests passed
+BUILD SUCCESS
+```
+Các nhóm test đã verify qua JUnit/Mockito:
+- Validation errors.
+- LLM Provider Retry logic (Mock HTTP 429, timeout, network error).
+- Global Exception Handler mapping logic (Kiểm tra Response entity và việc inject `requestId`).
+- Rate Limiting logic.
+- Authentication & Conversation services.
+
+### Files Modified
+
+```text
+application.yaml
+AiProperties.java
+LlmConfig.java
+GroqLlmProvider.java
+LlmException.java
+GlobalExceptionHandler.java
+SecurityConfig.java
+DelegatedAuthenticationEntryPoint.java (New)
+DelegatedAccessDeniedHandler.java (New)
+AiService.java
+GlobalExceptionHandlerTest.java (New)
+GroqLlmProviderTest.java
+```
+
+### Day 3 Result
+
+```text
+Status: Completed
+
+Tests: 52/52 passed
+
+Known Issues: None
+```
+
+---
+
+*Worklog được cập nhật liên tục theo tiến độ development.*

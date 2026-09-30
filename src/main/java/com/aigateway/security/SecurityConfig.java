@@ -1,6 +1,8 @@
-package com.aigateway.config;
+package com.aigateway.security;
 
-import com.aigateway.security.JwtAuthenticationFilter;
+import com.aigateway.security.handle.DelegatedAccessDeniedHandler;
+import com.aigateway.security.handle.DelegatedAuthenticationEntryPoint;
+import com.aigateway.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +22,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DelegatedAuthenticationEntryPoint authenticationEntryPoint;
+    private final DelegatedAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -39,6 +43,11 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
 
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
+
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
@@ -47,7 +56,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/refresh"
+                                "/api/v1/auth/refresh",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
                         ).permitAll()
 
                         .anyRequest().authenticated()

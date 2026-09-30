@@ -1,4 +1,4 @@
-package com.aigateway.security;
+package com.aigateway.security.jwt;
 
 import com.aigateway.config.JwtProperties;
 import com.aigateway.entity.User;
@@ -15,15 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
-/**
- * Handles all JWT access-token operations:
- *   - generate
- *   - validate
- *   - extract claims
- *
- * Refresh tokens are NOT JWT; they are opaque random UUIDs managed by
- * {@link com.aigateway.service.RefreshTokenService}.
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -31,12 +23,6 @@ public class JwtService {
 
     private final JwtProperties jwtProperties;
 
-    // ── Generate ──────────────────────────────────────────────────────────────
-
-    /**
-     * Build an access token for the given user.
-     * Payload: sub=userId, userId, email, role, iat, exp.
-     */
     public String generateAccessToken(User user) {
         long now = System.currentTimeMillis();
         Date issuedAt = new Date(now);
@@ -55,8 +41,6 @@ public class JwtService {
                 .compact();
     }
 
-    // ── Validate ──────────────────────────────────────────────────────────────
-
     public boolean isValid(String token) {
         try {
             parseClaims(token);
@@ -66,8 +50,6 @@ public class JwtService {
             return false;
         }
     }
-
-    // ── Extract ───────────────────────────────────────────────────────────────
 
     public Long extractUserId(String token) {
         Claims claims = parseClaims(token);
@@ -89,8 +71,6 @@ public class JwtService {
     public String extractRole(String token) {
         return parseClaims(token).get("role", String.class);
     }
-
-    // ── Internal ──────────────────────────────────────────────────────────────
 
     private Claims parseClaims(String token) {
         return Jwts.parser()

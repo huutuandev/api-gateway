@@ -21,3 +21,10 @@ jwt:
   secret: test-secret-key-for-unit-tests-only-at-least-32-chars
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
+
+ai:
+  provider: groq
+  api-key: test-key-not-real
+  base-url: http://localhost:9999
+  default-model: llama-3.3-70b-versatile
+  timeout-ms: 5000

@@ -20,7 +20,7 @@ public class AuthController {
 
     private final AuthService authService;
 
-    /** Register a new user. Returns 201 with UserResponse (no password). */
+
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(
             @Valid @RequestBody RegisterRequest request
@@ -29,7 +29,7 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    /** Authenticate and return access + refresh tokens. */
+
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest request
@@ -38,7 +38,7 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    /** Rotate refresh token and return new access + refresh tokens. */
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
             @Valid @RequestBody RefreshTokenRequest request
@@ -47,10 +47,7 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Logout: delete refresh token from Redis.
-     * Requires valid access token (enforced by SecurityConfig — /logout is authenticated).
-     */
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @Valid @RequestBody LogoutRequest request

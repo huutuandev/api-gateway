@@ -1,4 +1,4 @@
-package com.aigateway.security;
+package com.aigateway.security.user;
 
 import com.aigateway.entity.User;
 import com.aigateway.repository.UserRepository;
@@ -30,13 +30,14 @@ public class CustomUserDetailsService implements UserDetailsService {
                         "User not found: " + email
                 ));
 
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
+        return CustomUserDetails.builder()
+                .id(user.getId())
+                .username(user.getEmail())
                 .password(user.getPasswordHash())
                 .authorities(List.of(
                         new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
                 ))
-                .disabled(!user.getEnabled())
+                .enabled(user.getEnabled())
                 .build();
     }
 }

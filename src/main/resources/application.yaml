@@ -1,11 +1,13 @@
 spring:
   application:
     name: ai-gateway
+  config:
+    import: optional:file:.env[.properties]
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/ai_gateway
-    username: postgres
-    password: postgres
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -22,13 +24,27 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
 
 server:
   port: 8080
 
 jwt:
-  secret: ${JWT_SECRET:default-dev-secret-change-this-in-production-must-be-at-least-32-chars}
+  secret: ${JWT_SECRET}
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
+
+ai:
+  provider: groq
+  api-key: ${LLM_API_KEY}
+  base-url: https://api.groq.com/openai/v1
+  default-model: qwen/qwen3.8-27b
+  llm:
+    connect-timeout: 5000
+    read-timeout: 30000
+    max-retries: 2
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%15.15t] [%X{requestId}] %-40.40logger{39} : %m%n"
