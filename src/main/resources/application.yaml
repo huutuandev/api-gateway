@@ -5,9 +5,9 @@ spring:
     import: optional:file:.env[.properties]
 
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -37,7 +37,7 @@ jwt:
 
 ai:
   provider: groq
-  api-key: ${GROQ_API_KEY}
+  api-key: ${LLM_API_KEY}
   base-url: https://api.groq.com/openai/v1
   default-model: qwen/qwen3.8-27b
   llm:
