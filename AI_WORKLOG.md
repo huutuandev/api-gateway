@@ -411,3 +411,66 @@ Known Issues: None
 ---
 
 *Worklog được cập nhật liên tục theo tiến độ development.*
+
+## Day 4 — Usage + Completion
+
+### 1. AI Tools Used
+
+| Tool | Role |
+|------|------|
+| **Antigravity** (Google DeepMind) | Primary AI assistant — generating Swagger/OpenAPI config, Usage endpoints, Docker deployment files, and Postman collection. |
+
+### 2. Prompts Used
+
+Trong Day 4, developer tập trung hoàn thiện các tính năng cuối cùng để public:
+
+**Prompt 1 — Swagger & API Documentation**
+```text
+Thêm cấu hình OpenAPI/Swagger cho project để tự động sinh tài liệu API.
+Chắc chắn API có phần JWT Authentication.
+```
+
+**Prompt 2 — AI Usage & Analyze API**
+```text
+Tạo API POST /ai/analyze nhận input text và trả về JSON structured output (không lưu vào message history).
+Tạo API GET /usage để thống kê token, latency, error rate dựa trên ai_requests table.
+```
+
+**Prompt 3 — Dockerize**
+```text
+Viết Dockerfile multi-stage build và docker-compose.yml bao gồm App, Postgres 16, Redis 7.
+```
+
+**Prompt 4 — Postman Collection**
+```text
+Tạo file AIGateway.postman_collection.json chứa đầy đủ request tới các Controller hiện tại.
+Sử dụng collection variables (baseUrl, accessToken).
+```
+
+### 3. AI Suggestions
+
+- **Structured Output Parsing:** AI xử lý việc parse kết quả `LlmResponse` cho `/ai/analyze` bằng cách bóc tách an toàn (strip markdown json blocks) trước khi deserialize qua `ObjectMapper`.
+- **Usage Statistics Optimization:** Thay vì xử lý logic trong service layer, AI đề xuất viết một JPQL query `getUsageStatsByUserId` gom nhóm các aggregation logic vào DB.
+- **Docker Multi-Stage Build:** Sử dụng base image `maven` để build layer và `jre-alpine` để run.
+- **Postman Variables:** Khuyến nghị dùng biến `{{accessToken}}` trong Authorization.
+
+### 4. Developer Verification / Changes
+
+| Feature | Verification | Issues Fixed |
+|---------|-------------|--------------|
+| `/ai/analyze` JSON Parsing | Chạy manual test. | LLM đôi khi trả về raw JSON có markdown. Cập nhật System Prompt thành "return ONLY a valid JSON object". |
+| `/usage` Endpoint | Chạy script tạo các request mẫu. | Kiểm tra `errorRate` không dính lỗi DivisionByZero. Sử dụng `NULLIF`. |
+| Docker Compose | Build `docker-compose up -d --build`. | Đã config `depends_on` cho redis và postgres. |
+| Documentation Sync | Đối chiếu code với README và Postman. | Phát hiện thiếu API `/ai/analyze` và `/usage`. Đã rebuild toàn bộ Document. |
+
+### 5. Day 4 Result
+
+```text
+Completed:
+  - Tích hợp Swagger UI thành công tại `/swagger-ui/index.html`.
+  - Hoàn thiện `/api/v1/ai/analyze` và `/api/v1/usage`.
+  - Setup Dockerfile / docker-compose.yml hoàn chỉnh.
+  - Cập nhật đồng bộ README, AI_WORKLOG và Postman collection.
+
+Status: Project Complete & Ready.
+```
